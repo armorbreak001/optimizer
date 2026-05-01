@@ -265,4 +265,88 @@ describe('Optimizer', () => {
         .trim()
     ).toEqual(outputJSON_mATCTrue_mDTCFalse_schemaTrue.trim())
   })
+
+  it('should not produce invalid $ref paths for schemas nested inside allOf/anyOf/oneOf arrays (issue #1990)', async () => {
+    const inputWithAllOf = `
+asyncapi: 3.0.0
+id: "urn:com:example"
+info:
+  title: x
+  version: 1.4.0
+operations:
+  A:
+    action: "send"
+    channel:
+      $ref: "#/channels/A"
+    messages:
+      - $ref: "#/channels/A/messages/A"
+channels:
+  A:
+    address: ""
+    messages:
+      A:
+        $ref: "#/components/messages/A"
+components:
+  messages:
+    A:
+      contentType: "application/json"
+      payload:
+        allOf:
+          - $ref: "#/components/schemas/EventEnvelope"
+          - $ref: "#/components/schemas/EnvelopeOverrides"
+          - type: object
+            properties:
+              data:
+                $ref: "#/components/schemas/A"
+  schemas:
+    A:
+      type: object
+      properties:
+        a:
+          type: string
+    EnvelopeOverrides:
+      type: object
+      properties:
+        type:
+          type: string
+          const: "a"
+    EventEnvelope:
+      allOf:
+        - type: object
+          properties:
+            specversion:
+              type: string
+            source:
+              type: string
+`
+    const optimizer = new Optimizer(inputWithAllOf)
+    await optimizer.getReport()
+    const result = optimizer.getOptimizedDocument({
+      output: Output.YAML,
+      rules: {
+        reuseComponents: true,
+        removeComponents: true,
+        moveAllToComponents: true,
+        moveDuplicatesToComponents: false,
+      },
+      disableOptimizationFor: {
+        schema: false,
+      },
+    })
+
+    // Should not contain invalid array-index $ref paths
+    expect(result).not.toContain('#/components/schemas/[0]')
+    expect(result).not.toContain('#/components/schemas/[1]')
+    expect(result).not.toContain('#/components/schemas/[2]')
+    // Should not have numeric schema keys
+    expect(result).not.toMatch(/schemas:\s*\n\s*'0'/)
+    expect(result).not.toMatch(/schemas:\s*\n\s*"0"/)
+    // All schema keys should be valid identifiers, not numeric or array-indexed
+    const schemaKeys = result.match(/schemas:\s*\n((?:\s+.*\n*)+)/)?.[1] || ''
+    const schemaNames = schemaKeys.match(/^\s{4}(\w+)/gm) || []
+    for (const name of schemaNames) {
+      expect(/^\d+$/.test(name)).toBe(false)
+      expect(/^\[\d+\]$/.test(name)).toBe(false)
+    }
+  })
 })

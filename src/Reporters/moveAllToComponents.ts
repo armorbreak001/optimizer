@@ -1,5 +1,5 @@
 import { Action } from '../Optimizer'
-import { createReport, isEqual, isInComponents, getComponentName } from '../Utils'
+import { createReport, isEqual, isInComponents, getComponentName, isNestedComponent } from '../Utils'
 import { OptimizableComponent, OptimizableComponentGroup, ReportElement, Reporter } from 'types'
 import Debug from 'debug'
 const debug = Debug('reporter:moveAllToComponents')
@@ -13,7 +13,12 @@ const findAllComponents = (
 ): ReportElement[] => {
   const allComponents = optimizableComponentGroup.components
   const insideComponentsSection = allComponents.filter(isInComponents)
-  const outsideComponentsSection = getOutsideComponents(allComponents, insideComponentsSection)
+  // Filter out nested components (e.g., inside allOf/anyOf/oneOf arrays)
+  // that would produce invalid $ref paths like #/components/schemas/[0]
+  const outsideComponentsSection = getOutsideComponents(
+    allComponents.filter((c) => !isNestedComponent(c)),
+    insideComponentsSection
+  )
 
   const resultElements: ReportElement[] = []
 

@@ -169,4 +169,23 @@ const getComponentName = (component: OptimizableComponent): string => {
   return componentName
 }
 
+/**
+ * Checks if a component path represents a nested (non-top-level) component.
+ * Components inside array indices (allOf[0], anyOf[1], oneOf[2], etc.)
+ * or whose resolved names are numeric/array-indexed should not be treated
+ * as independent movable components, as they produce invalid $ref paths.
+ */
+export const isNestedComponent = (component: OptimizableComponent): boolean => {
+  // Array indices in lodash path format: [0], [1], etc.
+  if (/\[\d+\]/.test(component.path)) {
+    return true
+  }
+  const name = getComponentName(component)
+  // Numeric names or bracket-wrapped indices are invalid component keys
+  if (/^\d+$/.test(name) || /^\[\d+\]$/.test(name)) {
+    return true
+  }
+  return false
+}
+
 export { compareComponents, isEqual, isInComponents, isInChannels, toJS, getComponentName }
